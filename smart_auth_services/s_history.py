@@ -30,3 +30,7 @@ def getHistoryByEmployerIdentifier(identifier: str):
 
 def getHistoryOfDate(date: datetime.date | datetime.datetime):
     return History.getHistoryAtDate(date)
+
+
+def getLastFiveDaysHistory():
+    return History.lastFiveDayData()

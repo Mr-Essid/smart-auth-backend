@@ -56,6 +56,18 @@ def getAllAdmins() -> list[AdminResponse]:
     return Admin.getAllAdmins()
 
 
+def ActiveAdmin(id_: int):
+    return Admin.activeAdmin(id_)
+
+
+def DisActiveAdmin(id_: int):
+    return Admin.disActiveAdmin(id_)
+
+
+def getLastFiveDaysData():
+    pass
+
+
 if __name__ == '__main__':
     # admin_to_update = AdminUpdate(password_admin='HelloWorld_')
     # print(updateAdmin(3, admin_to_update))

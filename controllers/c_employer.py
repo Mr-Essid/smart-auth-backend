@@ -7,7 +7,7 @@ from BaseModels import EmployerRequest, EmployerResponse, AdminResponse, Details
 from database.models import ArgumentError, IdentifierExistsError
 from smart_auth_services.s_employer import (addEmployer, updateEmployer, deleteEmployer, getEmployerByid,
                                             getEmployerByEmail, getAllEmployers, getEmployerByIdentifier,
-                                            updateFaceCoding)
+                                            updateFaceCoding, searchEmployerByName, getEmployersWithState)
 from fastapi import APIRouter, UploadFile, HTTPException, Form
 
 employer_router = APIRouter(prefix="/employer", tags=["Employer"])
@@ -31,7 +31,7 @@ async def addEmployerC(file: UploadFile, name=Form(max_length=30, min_length=4),
         email_employer=email,
         identifier_employer=identifier
     )
-    details: Details
+    details = None
     try:
         details = addEmployer(employer, codings[0])
     except (ArgumentError, IdentifierExistsError) as e:
@@ -72,9 +72,20 @@ async def updateFaceCodingC(file: UploadFile, id_: int):
     return employer
 
 
+@employer_router.get("/employer/state")
+async def getEmployersWithStateC(state: str):
+    if state == "active":
+        return getEmployersWithState(True)
+    if state == "inactive":
+        return getEmployersWithState(False)
+
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="State Incorrect")
+
+
 @employer_router.delete('/{id_}')
 def deleteEmployerC(id_: int):
-    detail: Details
+    detail: EmployerResponse
     try:
         detail = deleteEmployer(id_)
 
@@ -104,6 +115,11 @@ def getEmployerById(id_: int):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'There Is No Employer With id {id_}')
 
     return employer
+
+
+@employer_router.get("/search/name")
+def searchEmployer(keyword: str):
+    return searchEmployerByName(keyword)
 
 
 @employer_router.get('/identifier/{ident}')

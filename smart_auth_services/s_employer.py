@@ -2,7 +2,7 @@ from BaseModels import EmployerRequest, Details, EmployerUpdate, EmployerRespons
 from database.models import Employer
 
 
-def addEmployer(employer_request: EmployerRequest, face_coding: list[float]) -> Details:
+def addEmployer(employer_request: EmployerRequest, face_coding: list[float]) -> EmployerResponse:
     """
     :raise ArgumentError
     :raise IdentifierExistsError
@@ -23,7 +23,7 @@ def updateEmployer(employer_update: EmployerUpdate) -> EmployerResponse:
     return Employer.updateEmployer(employer_update)
 
 
-def deleteEmployer(id_: int) -> Details:
+def deleteEmployer(id_: int) -> EmployerResponse:
     """
     :raise ArgumentError
     :param id_:
@@ -75,7 +75,17 @@ def updateFaceCoding(id_: int, faceCoding: list[float]) -> EmployerResponse:
     return Employer.updateFaceCoding(id_, faceCoding)
 
 
+def searchEmployerByName(name: str):
+    return Employer.searchEmployer(name)
+
+
+def getEmployersWithState(state: bool):
+    return Employer.getEmployerWithState(state)
+
+
 if __name__ == '__main__':
-    print(addEmployer(
-        EmployerRequest(name_employer='amine', lastname_employer='essid', identifier_employer='emp04',
-                        email_employer='essid001@go.com'), face_coding=[3.323, 42.4323, 0.43243, 2.4234, 0.423]))
+    # print(addEmployer(
+    #     EmployerRequest(name_employer='amine', lastname_employer='essid', identifier_employer='emp04',
+    #                     email_employer='essid001@go.com'), face_coding=[3.323, 42.4323, 0.43243, 2.4234, 0.423]))
+
+    pass

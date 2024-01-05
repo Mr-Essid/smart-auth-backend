@@ -4,9 +4,10 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from BaseModels import AdminRequest, Details, AdminUpdate, AdminResponse, Token
-from database.models import ArgumentError
+from database.models import ArgumentError, IdentifierExistsError
 from smart_auth_services.JWTService import create_access_token, decodeAccessToken
-from smart_auth_services.s_admin import (addAdmin, updateAdmin, deleteAdmin, getAllAdmins, getAdminById, getAdminByMail)
+from smart_auth_services.s_admin import (addAdmin, updateAdmin, deleteAdmin, getAllAdmins, getAdminById, getAdminByMail,
+                                         ActiveAdmin, DisActiveAdmin)
 from utils import sha256
 
 admin_route = APIRouter(prefix="/admin", tags=["Admin"])
@@ -20,15 +21,16 @@ def getCurrentAdmin(token=Depends(oauth2_scheme)):
     return getAdminByMail(email)
 
 
-@admin_route.post("/signup", response_model=Details)
+@admin_route.post("/signup", response_model=AdminResponse)
 def addAdminC(admin: AdminRequest):
-    details: Details
+    employer = None
     try:
-        details = addAdmin(admin)
-    except ArgumentError as e:
+        # all internet sign in admins have to wait until root admin accept there request
+        employer = addAdmin(admin)
+    except (ArgumentError, IdentifierExistsError) as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=e.message)
 
-    return details
+    return employer
 
 
 @admin_route.get('/current')
@@ -69,13 +71,46 @@ def getAdminsC(email: str | None = None):
     return getAllAdmins()
 
 
+@admin_route.get("/admin/state/update/{id_}/active")
+def adminUpdateStatus(id_: int, currentUser: AdminResponse = Depends(getCurrentAdmin)):
+    if currentUser.authority != 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your Request Is Not Authorized"
+        )
+
+    try:
+        return ActiveAdmin(id_)
+    except ArgumentError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Admin Not Found"
+        )
+
+
+@admin_route.get("/admin/state/update/{id_}/dis-active")
+def adminUpdateStatus(id_: int, currentUser: AdminResponse = Depends(getCurrentAdmin)):
+    if currentUser.authority != 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your Request Is Not Authorized"
+        )
+
+    try:
+        return DisActiveAdmin(id_)
+    except ArgumentError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Admin Not Found"
+        )
+
+
 @admin_route.get('/{id_}', response_model=AdminResponse)
 def getAdminByIdC(id_: int):
     admin = getAdminById(id_)
 
     if not admin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Admin With id {id_} Not Found")
-
     return admin
 
 
@@ -96,6 +131,12 @@ def loginAdmin(formData: Annotated[OAuth2PasswordRequestForm, Depends()]):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not admin.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your Request Is On Process"
         )
 
     token_ = create_access_token({'username': admin.email_admin})

@@ -2,12 +2,12 @@ import datetime
 from typing import Type
 
 from sqlalchemy import (String, Integer, ARRAY, Column, Identity, Boolean, Date, Double, ForeignKey, DateTime, Text,
-                        select)
+                        select, func, Row, update)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import declarative_base, relationship, Session
 
 from BaseModels import (AdminRequest, AdminUpdate, Details, AdminResponse, EmployerRequest, EmployerUpdate,
-                        EmployerResponse, HistoryResponse)
+                        EmployerResponse, HistoryResponse, DataOfDayHistory)
 from database.mainDB import engine
 from utils import sha256
 
@@ -42,14 +42,14 @@ class Admin(Base):
     name_admin = Column(String(30), nullable=False)
     email_admin = Column(String(100), nullable=False, unique=True)
     password_admin = Column(Text, nullable=False)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)
     create_at = Column(Date)
+    authority = Column(Integer, default=1)
 
     def __init__(self, admin: AdminRequest):
         self.name_admin = admin.name_admin
         self.email_admin = admin.email_admin
         self.password_admin = admin.password_admin
-        self.is_active = admin.is_active if admin.is_active is not None else True
         self.create_at = datetime.date.today()
 
     @staticmethod
@@ -80,7 +80,7 @@ class Admin(Base):
             except IntegrityError as e:
                 session.rollback()
 
-        return Details(message="Admin Added Successfully")
+        return cls.getAdminByEmail(admin.email_admin)
 
     @classmethod
     def deleteAdmin(cls, id_: int):
@@ -96,6 +96,40 @@ class Admin(Base):
         return Details(message='Admin Deleted')
 
     @classmethod
+    def activeAdmin(cls, id_: int):
+
+        with Session(engine) as session:
+            admin = session.query(cls).filter(cls.id_admin == id_).first()
+
+            if admin is None:
+                raise ArgumentError(f"No Admin With id {id_}")
+
+            query = update(cls).where(cls.id_admin == id_).values(
+                {cls.is_active: True}
+            )
+            session.execute(query)
+            session.commit()
+
+        return Details(message='Admin Activated')
+
+    @classmethod
+    def disActiveAdmin(cls, id_: int):
+
+        with Session(engine) as session:
+            admin = session.query(cls).filter(cls.id_admin == id_).first()
+
+            if admin is None:
+                raise ArgumentError(f"No Admin With id {id_}")
+
+            query = update(cls).where(cls.id_admin == id_).values(
+                {cls.is_active: False}
+            )
+            session.execute(query)
+            session.commit()
+
+        return Details(message='Admin Dis-Active')
+
+    @classmethod
     def updateAdmin(cls, id_, adminUpdate: AdminUpdate):
         if adminUpdate.name_admin is None and adminUpdate.password_admin is None:
             raise ArgumentError("You Should Have Filed At Least")
@@ -106,7 +140,7 @@ class Admin(Base):
                 raise ArgumentError(f'No Admin With id {id_}')
 
             if adminUpdate.name_admin is not None:
-                if 4 < len(adminUpdate.name_admin) < 30:
+                if 4 <= len(adminUpdate.name_admin) <= 30:
                     admin.name_admin = adminUpdate.name_admin
 
                 else:
@@ -155,7 +189,7 @@ class Admin(Base):
         adminList = None
 
         with Session(engine) as session:
-            admins = session.query(cls).all()
+            admins = session.query(cls).filter(cls.name_admin != 'root').all()
 
         def parseAdmin(admin: Type[Admin]):
             return AdminResponse(**admin.__dict__)
@@ -194,7 +228,7 @@ class Employer(Base):
         self.face_coding_employer = face_coding
 
     @classmethod
-    def addEmployer(cls, emp: EmployerRequest, face_coding: list[float]):
+    def addEmployer(cls, emp: EmployerRequest, face_coding: list[float]) -> EmployerResponse:
         cls.dataValidation(emp)
         employerExists = cls.getEmployerByMail(emp.email_employer)
         employerExistsIdentifier = cls.getEmployerByIdentifier(emp.identifier_employer)
@@ -218,7 +252,7 @@ class Employer(Base):
             except IntegrityError as e:
                 session.rollback()
 
-        return Details(message='Employer Added Successfully')
+        return cls.getEmployerByIdentifier(emp.identifier_employer)
 
     @classmethod
     def getEmployerById(cls, id_employer) -> EmployerResponse | None:
@@ -293,7 +327,7 @@ class Employer(Base):
 
             employer_.is_active = False
             session.commit()
-        return Details(message='Employer Deleted Successfully')
+        return cls.getEmployerById(id_)
 
     @classmethod
     def getAllEmployers(cls):
@@ -335,6 +369,12 @@ class Employer(Base):
         return cls.getEmployerById(id_)
 
     @classmethod
+    def searchEmployer(cls, keyword):
+        with Session(engine) as session:
+            allEmployersByName = session.query(cls).filter(cls.name_employer.like(f"%{keyword}%")).all()
+            return allEmployersByName
+
+    @classmethod
     def updateStateEmployer(cls, id_employer, state: Boolean):
 
         with Session(engine) as session:
@@ -348,6 +388,13 @@ class Employer(Base):
 
             return EmployerResponse(**employer.__dict__)
 
+    @classmethod
+    def getEmployerWithState(cls, state: bool):
+        with Session(engine) as session:
+            employers = session.query(cls).filter(cls.is_active == state).all()
+
+        return employers
+
 
 class History(Base):
     __tablename__ = 'history'
@@ -355,11 +402,12 @@ class History(Base):
     id_employer = Column(Integer, ForeignKey('employers.id_employer', onupdate="CASCADE", ondelete="CASCADE"),
                          nullable=False)
     is_active = Column(Boolean, default=True)
-    date_employer_enter = Column(DateTime, default=datetime.datetime.now())
+    date_employer_enter = Column(DateTime, nullable=False)
     employers = relationship("Employer", back_populates="history")
 
-    def __init__(self, id_employer):
+    def __init__(self, id_employer, datetime_: datetime.datetime):
         self.id_employer = id_employer
+        self.date_employer_enter = datetime_
 
     @classmethod
     def addHistory(cls, emp_id):
@@ -370,7 +418,8 @@ class History(Base):
             if employer is None or not employer.is_active:
                 raise ArgumentError(f'There is No Employer With id {emp_id}')
 
-            new_history = cls(emp_id)
+            dateNew = datetime.datetime.now()
+            new_history = cls(emp_id, dateNew)
             session.add(new_history)
             session.commit()
 
@@ -380,7 +429,7 @@ class History(Base):
     def getAllHistory(cls):
         history: None | list[Type[cls]]
         with Session(engine) as session:
-            history = session.query(cls).all()
+            history: list[Type[History]] = session.query(cls).order_by(cls.date_employer_enter.desc()).all()
 
         def parseHistory(history_: Type[cls]):
             return HistoryResponse(**history_.__dict__)
@@ -454,6 +503,21 @@ class History(Base):
 
             return list_
 
+    @classmethod
+    def lastFiveDayData(cls):
+        dataOfLastFiveDay = None
+        with Session(engine) as session:
+            dataOfLastFiveDay = session.query(cls.date_employer_enter, func.count(cls.id_employer)).group_by(
+                cls.date_employer_enter).order_by(cls.date_employer_enter.desc()).limit(5).all()
+
+        def parseData(data: tuple[datetime.datetime, int]):
+            print(data)
+            return DataOfDayHistory(day=data[0].date(), howMany=data[1])
+
+        res = list(map(parseData, dataOfLastFiveDay))
+
+        return res
+
 
 if __name__ == '__main__':
     # new_one = AdminRequest(
@@ -462,6 +526,7 @@ if __name__ == '__main__':
     #     email_admin='essid20@go.com'
     # )
 
+    print(History.lastFiveDayData())
     # Admin.addAdmin(new_one)
     # adminToUpdate = AdminUpdate(name_admin='khaled', password_admin='Hello__')
     # print(Admin.getAdminByEmail('root@go.co'))
@@ -475,6 +540,7 @@ if __name__ == '__main__':
     # print(Employer.deleteEmployer(5))
 
     # print(History.addHistory(1))
-    print(History.getAllHistory())
+
     # print(Employer.getAllEmployers()[0].face_coding_employer)
     # print(Admin.updateAdmin(2, ))
+    # print(Employer.getEmployerWithState(False))

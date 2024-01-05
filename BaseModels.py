@@ -11,7 +11,6 @@ class AdminRequest(BaseModel):
     name_admin: str
     email_admin: str
     password_admin: str
-    is_active: bool = True
 
 
 class Details(BaseModel):
@@ -20,7 +19,9 @@ class Details(BaseModel):
 
 class AdminResponse(AdminRequest):
     id_admin: int
+    authority: int
     create_at: datetime.date | None
+    is_active: bool
 
 
 class AdminUpdate(BaseModel):
@@ -56,6 +57,12 @@ class EmployerResponse(EmployerRequest):
     id_employer: int
     create_at: datetime.date
     face_coding_employer: list[float]
+    is_active: bool
+
+
+class DataOfDayHistory(BaseModel):
+    day: datetime.date
+    howMany: int
 
 
 class EmployerUpdate(BaseModel):
